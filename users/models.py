@@ -22,5 +22,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
+    def __init__(self, *args, **kwargs):
+        super(User, self).__init__(*args, **kwargs)
+        if not self.profile_picture:
+            self.profile_picture = 'profiles/default_user.png'
+
     def __str__(self):
         return self.email

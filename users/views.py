@@ -1,18 +1,15 @@
-from django.shortcuts import render
-from django.http import HttpResponse
 from django.conf import settings
-from rest_framework.request import Request
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import generics
 from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from django.contrib.auth import login
 
 from users.models import User
-from users.serializers import LoginSerializer
-from users.serializers import RegisterSerializer
+from users.serializers import RegisterSerializer, LoginSerializer, UserSerializer
 
 
 class HelloWorld(APIView):
@@ -22,20 +19,17 @@ class HelloWorld(APIView):
 
 class UserListView(APIView):
     def get(self, request):
-        users = User.objects.all()
-        user_list = []
-        for user in users:
-            user_list.append({
-                'id': user.id,
-                'email': user.email,
-                'username': user.username,
-                'mobile_number': user.mobile_number if user.mobile_number else None,
-                'dob': user.dob if user.dob else None,
-                'profile_picture': user.profile_picture if user.profile_picture else None,
-                'is_active': user.is_active,
-                'is_verified': user.is_verified
-            })
-        return Response(user_list)
+        users = User.objects.filter(is_active=True)
+        serializer = UserSerializer(users, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class UserAccountView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        return self.request.user
 
 
 class ProtectedView(APIView):
@@ -47,6 +41,7 @@ class ProtectedView(APIView):
 
 class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
+    parser_classes = (MultiPartParser, FormParser)
     serializer_class = RegisterSerializer
 
     def perform_create(self, serializer):
@@ -80,3 +75,22 @@ class LoginView(generics.GenericAPIView):
             response.set_cookie('access_token', access_token, httponly=True)
             response.set_cookie('refresh_token', refresh_token, httponly=True)
         return super().finalize_response(request, response, *args, **kwargs)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def deactivate_user(request):
+    user = request.user
+    user.is_active = False
+    user.save()
+    return Response({'status': 'User deactivated'}, status=status.HTTP_200_OK)
+
+
+class UserProfileUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
